@@ -1,0 +1,37 @@
+trigger trg4 on OpportunityLineItem (after insert,after Delete)
+{
+    Set<Id> accId = new Set<Id>();
+    Set<Id> oppId = new Set<Id>();
+    if(trigger.isAfter && trigger.isInsert)
+    {
+        for(OpportunityLineItem ol : trigger.new)
+        {
+            oppId.add(ol.OpportunityId);
+        }
+    }
+    if(trigger.isAfter && trigger.isDelete)
+    {
+        for(OpportunityLineItem ol : trigger.old)
+        {
+            oppId.add(ol.OpportunityId);
+        }
+    }
+    List<Opportunity> oppList = [Select Id,AccountId from Opportunity where Id IN : oppId];
+    for(Opportunity op : oppList)
+    {
+        accId.add(op.AccountId);
+    }
+    List<AggregateResult> aggrList = [Select count(Id)oli,Opportunity.AccountId from OpportunityLineItem where Opportunity.AccountId IN : accId group by Opportunity.AccountId];
+    List<Account> accList = new List<Account>();
+    if(aggrList.size() > 0)
+    {
+    for(AggregateResult aggr : aggrList)
+    {
+        Account ac  = new Account();
+        ac.Id = (Id)aggr.get('AccountId');
+        ac.Total_Amount__c = (Decimal)aggr.get('oli');
+        accList.add(ac);
+    }
+    }
+    update accList;
+}
