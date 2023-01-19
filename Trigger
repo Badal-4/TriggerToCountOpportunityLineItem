@@ -1,37 +1,110 @@
-trigger trg4 on OpportunityLineItem (after insert,after Delete)
+/*trigger trg5 on OpportunityLineItem (after insert,after Delete)
 {
     Set<Id> accId = new Set<Id>();
     Set<Id> oppId = new Set<Id>();
-    if(trigger.isAfter && trigger.isInsert)
+    
+    if(trigger.isAfter)
     {
-        for(OpportunityLineItem ol : trigger.new)
+        if(trigger.isInsert)
         {
-            oppId.add(ol.OpportunityId);
+            if(!trigger.new.isEmpty())
+            {
+                for(OpportunityLineItem ol : trigger.new)
+                {
+                    
+                       oppId.add(ol.OpportunityId);
+                    
+                }
+            }
+        }
+    
+        if(trigger.isDelete)
+        {
+            if(!trigger.old.isEmpty())
+            {
+                for(OpportunityLineItem ol : trigger.old)
+                {
+                    
+                       oppId.add(ol.OpportunityId);
+                    
+                }
+            }
         }
     }
-    if(trigger.isAfter && trigger.isDelete)
+    if(!oppId.isEmpty())
     {
-        for(OpportunityLineItem ol : trigger.old)
+        List<Opportunity> oppList = [Select Id,AccountId from Opportunity where Id IN : oppId and AccountId != null];
+        for(Opportunity op : oppList)
         {
-            oppId.add(ol.OpportunityId);
+            accId.add(op.AccountId);
+        }
+        
+        List<AggregateResult> aggrList = [Select count(Id)oli,Opportunity.AccountId from OpportunityLineItem where Opportunity.AccountId IN : accId group by Opportunity.AccountId];
+        List<Account> accList = new List<Account>();
+        
+        if(aggrList.size() > 0)
+        {
+            for(AggregateResult aggr : aggrList)
+            {
+                Account ac  = new Account();
+                ac.Id = (Id)aggr.get('AccountId');
+                ac.nop__c = (Decimal)aggr.get('oli');
+                accList.add(ac);
+            }
+        }
+        if(!accList.isEmpty())
+        {
+           update accList;
         }
     }
-    List<Opportunity> oppList = [Select Id,AccountId from Opportunity where Id IN : oppId];
-    for(Opportunity op : oppList)
+}*/ 
+trigger trg5 on OpportunityLineItem (after insert,after Delete)
+{
+    Set<Id> oppId = new Set<Id>();
+    Map<Id, Decimal> oppLineItemCount = new Map<Id, Decimal>();
+    if(trigger.isAfter)
     {
-        accId.add(op.AccountId);
+        if(trigger.isInsert)
+        {
+            for(OpportunityLineItem ol : trigger.new)
+            {
+                oppId.add(ol.OpportunityId);
+            }
+        }
+        if(trigger.isDelete)
+        {
+            for(OpportunityLineItem ol : trigger.old)
+            {
+                oppId.add(ol.OpportunityId);
+            }
+        }
     }
-    List<AggregateResult> aggrList = [Select count(Id)oli,Opportunity.AccountId from OpportunityLineItem where Opportunity.AccountId IN : accId group by Opportunity.AccountId];
-    List<Account> accList = new List<Account>();
-    if(aggrList.size() > 0)
+    if(!oppId.isEmpty())
     {
-    for(AggregateResult aggr : aggrList)
-    {
-        Account ac  = new Account();
-        ac.Id = (Id)aggr.get('AccountId');
-        ac.Total_Amount__c = (Decimal)aggr.get('oli');
-        accList.add(ac);
+        List<Opportunity> oppList = [SELECT Id,AccountId FROM Opportunity WHERE Id IN :oppId];
+        for(Opportunity op : oppList)
+        {
+            oppLineItemCount.put(op.AccountId, 0);
+        }
+        for(AggregateResult aggr : [SELECT COUNT(Id)oli, Opportunity.AccountId FROM OpportunityLineItem WHERE Opportunity.AccountId IN :oppLineItemCount.keySet() GROUP BY Opportunity.AccountId])
+        {
+            oppLineItemCount.put((Id)aggr.get('AccountId'), (Decimal)aggr.get('oli'));
+        }
+        try
+        {
+            List<Account> accList = new List<Account>();
+            for(Id accountId : oppLineItemCount.keySet())
+            {
+                Account ac = new Account();
+                ac.Id = accountId;
+                ac.nop__c = oppLineItemCount.get(accountId);
+                accList.add(ac);
+            }
+            update accList;
+        }
+        catch(Exception e)
+        {
+            //Add error handling here
+        }
     }
-    }
-    update accList;
 }
